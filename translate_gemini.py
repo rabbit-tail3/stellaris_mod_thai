@@ -39,14 +39,14 @@ YML_EXTENSION = ".yml"
 
 # Configuration values controlled from Python code only
 # Adjust these paths/values as needed.
-INPUT_DIR = REPO_ROOT / "raw_data"
-OUTPUT_DIR = REPO_ROOT / "translated"
+INPUT_DIR = REPO_ROOT / "test_data"
+OUTPUT_DIR = REPO_ROOT / "test_output"
 MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-3-flash-preview")
 ROUNDS = 1
 PROMPT_KEY = "default"
 
 # Maximum number of API calls allowed in a single run (0 = unlimited)
-MAX_API_CALLS = 1
+MAX_API_CALLS = 5
 
 
 # ---------------------------------------------------------------------------
@@ -478,8 +478,6 @@ def main() -> int:
         return 1
 
     rounds = max(1, int(ROUNDS))
-    system_instruction = prompt_cfg["system_instruction"]
-    contents_template = prompt_cfg["contents_template"]
 
     # Collect all .yml files to process
     all_yml_files = [p for p in input_dir.rglob(f"*{YML_EXTENSION}") if p.is_file()]
@@ -501,10 +499,30 @@ def main() -> int:
             skipped += 1
             continue
 
+        ## Add new block help to pick which prompt
+        name = path.stem.lower()
+        if "crisis" in name:
+            prompt_key = "crisis"
+        elif "shroud" in name or "psionic" in name:
+            prompt_key = "shroud"
+        elif "humor" in name or "comedy" in name:
+            prompt_key = "humor"
+        elif "tooltip" in name or "interface" in name:
+            prompt_key = "tooltip"
+        else:
+            prompt_key = "default"
+        prompt_cfg = prompts.get(prompt_key, prompts["default"])
+        log(f"  Using prompt: '{prompt_key}'")
+
+        system_instruction = prompt_cfg["system_instruction"]
+        contents_template = prompt_cfg["contents_template"]
+
         log(f"[{file_num}/{len(all_yml_files)}] Processing: {rel_path}")
 
         try:
             lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
+            
+            lines = [line.replace("l_english:", "l_thai:") if "l_english:" in line else line for line in lines]
         except OSError as exc:
             print(f"Error: failed to read input file {path}: {exc}", file=sys.stderr)
             errors += 1
@@ -546,7 +564,7 @@ def main() -> int:
         new_lines = apply_translations_to_lines(lines, metadata, translated_values)
 
         try:
-            output_path.write_text("".join(new_lines), encoding="utf-8")
+            output_path.write_text("".join(new_lines), encoding="utf-8-sig")
             log(f"  Wrote translated file: {output_path}")
         except OSError as exc:
             print(f"Error: failed to write output file {output_path}: {exc}", file=sys.stderr)
